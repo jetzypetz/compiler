@@ -1,6 +1,5 @@
 from bx.tools import Tools
 from bx.parser import Parser
-from bx.muncher import Muncher
 from bx.reporter import Reporter
 
 def main():
@@ -14,23 +13,24 @@ def main():
     reporter    = Reporter()
     tools       = Tools(reporter)
     parser      = Parser(reporter)
-    muncher     = Muncher(reporter)
 
     # parse args
     reporter.checkpoint("parsing")
-    inname, outname = tools.parseargs()
+    inname, outbasename = tools.parseargs()
 
-    # filename to bx ast
+    # filename to ast
     reporter.checkpoint("ast gen")
-    ast = parser.to_ast(inname)
+    prgm = parser.to_prgm(inname)
 
     # bxast to tac
     reporter.checkpoint("tac gen")
-    tac = muncher.to_tac(ast)
+    tac = prgm.to_tac()
 
     # tac to json file
     reporter.checkpoint("json wr")
-    jsonname = tools.writejson(tac, outname + ".tac.json")
+    tools.writejson(tac, outbasename + ".tac.json")
+
+    reporter.checkpoint("end")
 
 
 if __name__ == "__main__":

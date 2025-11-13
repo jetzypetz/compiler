@@ -26,15 +26,15 @@ class Parser:
         self.lexer      = Lexer(self.reporter)
         self.parser     = ply.yacc.yacc(module = self)
 
-    def to_ast(self, filename: str):
+    def to_prgm(self, filename: str):
         try:
             with open(filename, "r") as f:
-                program = f.read()
+                prgm = f.read()
         except Exception() as e:
             self.reporter.crash(e)
 
         return self.parser.parse(
-            program,
+            prgm,
             lexer       = self.lexer.lexer,
             tracking    = True
         )
@@ -118,7 +118,7 @@ class Parser:
 
     def p_program(self, p):
         """program : DEF MAIN LPAREN RPAREN LBRACE stmts RBRACE"""
-        p[0] = p[6]
+        p[0] = Program(p[6], self.reporter)
 
     def p_error(self, p):
         if p:
