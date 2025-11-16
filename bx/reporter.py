@@ -1,13 +1,13 @@
 import sys
 import dataclasses as dc
 
-@dc.dataclass
 class Reporter():
     """
     report errors
     """
-    errors  = []
-    section = None
+    def __init__(self):
+        self.errors  = []
+        self.section = None
 
     def crash(self, errstr):
         print("=== Error backlog ===")
@@ -22,10 +22,10 @@ class Reporter():
 
     def log(self, err):
         match err:
-            case Error(errstr, this, context):
-                to_log = f"{{{self.section}}}" + errstr
-                to_log += f"\nin         {{{this}}}"        if this     else ""
-                to_log += f"\nin context {{{context}}}\n"   if context  else ""
+            case Error():
+                to_log = f"{{{self.section}}}" + err.errstr
+                to_log += f"\nin         {{{err.this}}}"        if err.this     else ""
+                to_log += f"\nin context {{{err.context}}}\n"   if err.context  else ""
                 self.errors.append(to_log)
             case _:
                 self.errors.append(f"{{{self.section}}}" + err)
@@ -43,12 +43,12 @@ class Reporter():
         return False
 
 
-@dc.dataclass
 class Error():
     """
     class allows to pass errors forward with all information
     """
-    errstr  : str
-    this    = None
-    context = None
+    def __init__(self, errstr, this = None, context = None):
+        self.errstr     = errstr
+        self.this       = this
+        self.context    = context
     

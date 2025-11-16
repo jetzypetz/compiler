@@ -1,7 +1,7 @@
 def main() {
   var x = 42 : int;
   var y = x >> 1 : int;
-  y = y + 1;
+  y = z + 1;
   print(x + y);
   print(x - y);
   var z = x * 3 + y : int;

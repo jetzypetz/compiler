@@ -14,7 +14,7 @@ from .reporter import Reporter, Error
 class AST:
     line        : int
 
-    def pprint():
+    def pprint(self):
         return "base ast"
 
 ### EXPRESSIONS ###
@@ -22,7 +22,7 @@ class AST:
 @dc.dataclass
 class Expression(AST):
 
-    def pprint():
+    def pprint(self):
         return "base statement"
 
     def tac(self, generator, declared):
@@ -33,7 +33,7 @@ class Expression(AST):
 class Number(Expression):
     value       : int
 
-    def pprint():
+    def pprint(self):
         return self.value
 
     def tac(self, generator, declared):
@@ -43,7 +43,7 @@ class Number(Expression):
 class Name(Expression):
     name        : str
 
-    def pprint():
+    def pprint(self):
         return self.name
 
     def tac(self, generator, declared):
@@ -58,8 +58,8 @@ class BinaryOperation(Expression):
     right       : Expression
     operator    : str
 
-    def pprint():
-        return f"binary operation {{{operation}}} with:\nleft {{{left}}}\nright {{{right}}}"
+    def pprint(self):
+        return f"binary operation {{{self.operator}}} with:\nleft {{{self.left.pprint()}}}\nright {{{self.right.pprint()}}}"
 
     def tac(self, generator, declared):
         x, L1   = self.left.tac(generator, declared)
@@ -80,8 +80,8 @@ class UnaryOperation(Expression):
     right       : Expression
     operator    : str
 
-    def pprint():
-        return f"unary operation {{{operation}}} with:\nright {{{right}}}"
+    def pprint(self):
+        return f"unary operation {{{self.operator}}} with:\nright {{{self.right}}}"
 
     def tac(self, generator, declared):
         x, L    = self.right.tac(generator, declared)
@@ -119,7 +119,7 @@ un_ops = {
 @dc.dataclass
 class Statement(AST):
 
-    def pprint():
+    def pprint(self):
         return "base statement"
 
     def tac(self, generator, declared):
@@ -130,7 +130,7 @@ class Declaration(Statement):
     name        : str
     value       : Expression
 
-    def pprint():
+    def pprint(self):
         return f"declaration of {{{self.name}}} with value {{{self.value.pprint()}}}"
 
     def tac(self, generator, declared):
@@ -154,7 +154,7 @@ class Assignment(Statement):
     name        : str
     value       : Expression
 
-    def pprint():
+    def pprint(self):
         return f"assignment of {{{self.name}}} with value {{{self.value.pprint()}}}"
 
     def tac(self, generator, declared):
@@ -175,7 +175,7 @@ class Assignment(Statement):
 class Print(Statement):
     value       : Expression
 
-    def pprint():
+    def pprint(self):
         return f"printing of {{{self.value.pprint()}}}"
 
     def tac(self, generator, declared):
