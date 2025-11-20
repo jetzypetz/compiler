@@ -1,5 +1,5 @@
 compilerenv/
 *.tac.json
-__pycache__/
-parser.out
-parsetab.py
+bx/__pycache__/
+bx/parser.out
+bx/parsetab.py
