@@ -59,7 +59,7 @@ class BinaryOperation(Expression):
     operator    : str
 
     def pprint(self):
-        return f"binary operation {{{self.operator}}} with:\nleft {{{self.left.pprint()}}}\nright {{{self.right.pprint()}}}"
+        return f"binary operation {{{self.operator}}} with left: {{{self.left.pprint()}}}, right: {{{self.right.pprint()}}}"
 
     def tac(self, generator, declared):
         x, L1   = self.left.tac(generator, declared)
@@ -81,7 +81,7 @@ class UnaryOperation(Expression):
     operator    : str
 
     def pprint(self):
-        return f"unary operation {{{self.operator}}} with:\nright {{{self.right}}}"
+        return f"unary operation {{{self.operator}}} with right: {{{self.right}}}"
 
     def tac(self, generator, declared):
         x, L    = self.right.tac(generator, declared)

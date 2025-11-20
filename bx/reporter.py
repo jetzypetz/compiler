@@ -24,8 +24,8 @@ class Reporter():
         match err:
             case Error():
                 to_log = f"{{{self.section}}}" + err.errstr
-                to_log += f"\nin         {{{err.this}}}"        if err.this     else ""
-                to_log += f"\nin context {{{err.context}}}\n"   if err.context  else ""
+                to_log += f"\n\tin {{{err.this}}}"        if err.this     else ""
+                to_log += f"\n\tin context {{{err.context}}}"   if err.context  else ""
                 self.errors.append(to_log)
             case _:
                 self.errors.append(f"{{{self.section}}}" + err)
