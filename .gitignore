@@ -1,2 +1,3 @@
 compilerenv/
 *.tac.json
+__pycache__/
