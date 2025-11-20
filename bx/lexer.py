@@ -5,11 +5,19 @@ import re
 class Lexer:
     keywords = {
         x: x.upper() for x in (
-            'def'  ,
-            'int'  ,
-            'main' ,
-            'print',
-            'var'  ,
+            'def'      ,
+            'int'      ,
+            'bool'     ,
+            'main'     ,
+            'print'    ,
+            'var'      ,
+            'true'     ,
+            'false'    ,
+            'if'       ,
+            'else'     ,
+            'while'    ,
+            'break'    ,
+            'continue' ,
         )
     }
     
@@ -18,25 +26,35 @@ class Lexer:
         'NUMBER',               # : int
 
         # Punctuation
-        'LPAREN'   ,
-        'RPAREN'   ,
-        'LBRACE'   ,
-        'RBRACE'   ,
-        'COLON'    ,
-        'SEMICOLON',
+        'LPAREN'       ,
+        'RPAREN'       ,
+        'LBRACE'       ,
+        'RBRACE'       ,
+        'COLON'        ,
+        'SEMICOLON'    ,
 
-        'AMP'      ,
-        'DASH'     ,
-        'EQ'       ,
-        'GTGT'     ,
-        'HAT'      ,
-        'LTLT'     ,
-        'PCENT'    ,
-        'PIPE'     ,
-        'PLUS'     ,
-        'SLASH'    ,
-        'STAR'     ,
-        'TILD'     ,
+        'AMP'          ,
+        'DASH'         ,
+        'EQ'           ,
+        'GTGT'         ,
+        'HAT'          ,
+        'LTLT'         ,
+        'PCENT'        ,
+        'PIPE'         ,
+        'PLUS'         ,
+        'SLASH'        ,
+        'STAR'         ,
+        'TILD'         ,
+
+        'BOOL_EQ'      ,
+        'BOOL_NEQ'     ,
+        'BOOL_LT'      ,
+        'BOOL_LEQ'     ,
+        'BOOL_GT'      ,
+        'BOOL_GEQ'     ,
+        'BOOL_AND'     ,
+        'BOOL_OR'      ,
+        'BOOL_NOT'     ,
     ) + tuple(keywords.values())
 
     t_LPAREN    = re.escape('(')
@@ -58,6 +76,16 @@ class Lexer:
     t_SLASH     = re.escape('/')
     t_STAR      = re.escape('*')
     t_TILD      = re.escape('~')
+
+    t_BOOL_EQ   = re.escape('==')
+    t_BOOL_NEQ  = re.escape('!=')
+    t_BOOL_LT   = re.escape('<')
+    t_BOOL_LEQ  = re.escape('<=')
+    t_BOOL_GT   = re.escape('>')
+    t_BOOL_GEQ  = re.escape('>=')
+    t_BOOL_AND  = re.escape('&&')
+    t_BOOL_OR   = re.escape('||')
+    t_BOOL_NOT  = re.escape('!')
 
     t_ignore = ' \t'            # Ignore all whitespaces
     t_ignore_comment = r'//.*'

@@ -1,4 +1,5 @@
 import dataclasses as dc
+import enum
 
 from .reporter import Reporter, Error
 
@@ -29,6 +30,30 @@ class Expression(AST):
         return Error("This is a base expression",
                      this = self.pprint()), []
 
+class Type(enum.Enum):
+    VOID = 0
+    BOOL = 1
+    INT  = 2
+
+    def pprint(self):
+        match self:
+            case self.VOID:
+                return "void"
+            case self.BOOL:
+                return "bool"
+            case self.INT:
+                return "int"
+
+@dc.dataclass
+class Bool(Expression):
+    value       : bool
+
+    def pprint(self):
+        return "true" if self.value else "false"
+
+    def tac(self, generator, declared):
+        return (1 if self.value else 0), []
+    
 @dc.dataclass
 class Number(Expression):
     value       : int
@@ -100,19 +125,19 @@ def temp_names():
         i += 1
 
 bin_ops = {
-        '&' : 'and',
-        '-' : 'sub',
-        '>>' : 'shr',
-        '^' : 'xor',
-        '<<' : 'shl',
-        '%' : 'mod',
-        '|' : 'or',
-        '+' : 'add',
-        '/' : 'div',
-        '*' : 'mul'}
+        '&'     : 'and',
+        '-'     : 'sub',
+        '>>'    : 'shr',
+        '^'     : 'xor',
+        '<<'    : 'shl',
+        '%'     : 'mod',
+        '|'     : 'or',
+        '+'     : 'add',
+        '/'     : 'div',
+        '*'     : 'mul'}
 un_ops = {
-        '-' : 'neg',
-        '~' : 'not'}
+        '-'     : 'neg',
+        '~'     : 'not'}
 
 ### STATEMENTS ###
 
@@ -148,6 +173,16 @@ class Declaration(Statement):
         return L + [{"opcode"   : "const",
                      "args"     : [x],
                      "result"   : temp}]
+
+@dc.dataclass
+class Block(Statement):
+    statements  : [Statement]
+
+    def pprint(self):
+        return f"block with contents: {"\n" + stmt.pprint() for stmt in self.statements}"
+
+    def tac(self, generator, declared):
+        return None # TODO
 
 @dc.dataclass
 class Assignment(Statement):
@@ -187,6 +222,47 @@ class Print(Statement):
         return L + [{"opcode"    : "print",
                      "args"      : [x],
                      "result"    : None}]
+
+@dc.dataclass
+class Ifelse(Statement):
+    condition   : Expression
+    success     : Block
+    failure     : Ifelse | Block | None
+
+    def pprint(self):
+        return f"ifelse block with condition: {{{self.condition.pprint()}}}, then: {{{self.success.pprint()}}}, else: {{{self.failure.pprint()}}}"
+
+    def tac(self, generator, declared):
+        return None # TODO
+
+@dc.dataclass
+class While(Statement):
+    condition   : Expression
+    loop        : Block
+
+    def pprint(self):
+        return f"while loop with condition: {{{self.condition.pprint()}}}, loop: {{{self.loop.pprint()}}}"
+
+    def tac(self, generator, declared):
+        return None # TODO
+
+@dc.dataclass
+class  Break(Statement):
+
+    def pprint(self):
+        return f"break statement"
+
+    def tac(self, generator, declared):
+        return None # TODO
+
+@dc.dataclass
+class  Continue(Statement):
+
+    def pprint(self):
+        return f"continue statement"
+
+    def tac(self, generator, declared):
+        return None # TODO
 
 ### PROGRAM CLASS ###
 
