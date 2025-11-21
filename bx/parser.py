@@ -200,10 +200,6 @@ class Parser:
             p[0] = p[1]
             p[0].append(p[2])
 
-    def p_block(self, p):
-        """block : LBRACE stmts RBRACE"""
-        p[0] = p[2]
-
     def p_program(self, p):
         """program : DEF MAIN LPAREN RPAREN block"""
         p[0] = Program(p[5], self.reporter)
