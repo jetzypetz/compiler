@@ -1,27 +1,30 @@
 import ply.yacc
 import dataclasses as dc
 
-from .ast     import *
-from .lexer     import Lexer
-from .reporter  import Reporter
+from .lexer         import Lexer
+from .reporter      import Reporter
+
+from .expression    import *
+from .statement     import *
+from .program       import Program
 
 @dc.dataclass
 class Parser:
     tokens      = Lexer.tokens
     start       = 'program'
     precedence  = (
-        ('left'     , 'BOOL_OR'                 ),
-        ('left'     , 'BOOL_AND'                ),
-        ('left'     , 'PIPE'                    ),
-        ('left'     , 'HAT'                     ),
-        ('left'     , 'AMP'                     ),
-        ('nonassoc' , 'BOOL_EQ', 'BOOL_EQ'      ),
-        ('nonassoc' , 'BOOL_LT', 'BOOL_GT', 'BOOL_LEQ', 'BOOL_GEQ' ),
-        ('left'     , 'LTLT', 'GTGT'            ),
-        ('left'     , 'PLUS', 'DASH'            ),
-        ('left'     , 'STAR', 'SLASH', 'PCENT'  ),
-        ('right'    , 'UMINUS', 'BOOL_NOT'      ),
-        ('right'    , 'UNEG'                    ),
+        ('left'     , 'BOOL_OR'                                     ),
+        ('left'     , 'BOOL_AND'                                    ),
+        ('left'     , 'PIPE'                                        ),
+        ('left'     , 'HAT'                                         ),
+        ('left'     , 'AMP'                                         ),
+        ('nonassoc' , 'BOOL_EQ', 'BOOL_EQ'                          ),
+        ('nonassoc' , 'BOOL_LT', 'BOOL_GT', 'BOOL_LEQ', 'BOOL_GEQ'  ),
+        ('left'     , 'LTLT', 'GTGT'                                ),
+        ('left'     , 'PLUS', 'DASH'                                ),
+        ('left'     , 'STAR', 'SLASH', 'PCENT'                      ),
+        ('right'    , 'UMINUS', 'BOOL_NOT'                          ),
+        ('right'    , 'UNEG'                                        ),
     )
 
 
@@ -62,7 +65,7 @@ class Parser:
                 | FALSE"""
         p[0] = Bool(
             value       = (p[1] == "true"),
-            line        = p.lineno,
+            line        = p.lineno(0),
         )
 
     def p_type_number(self, p):
@@ -206,6 +209,6 @@ class Parser:
 
     def p_error(self, p):
         if p:
-            self.reporter.log(f'syntax error at line {p.lineno}')
+            self.reporter.log(f'syntax error at line {p.lineno(0)}')
         else:
             self.reporter.log('syntax error at end of file')

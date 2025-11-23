@@ -22,7 +22,7 @@ def main():
     reporter.checkpoint("ast gen")
     prgm = parser.to_prgm(inname)
 
-    # bxast to tac
+    # ast to tac
     reporter.checkpoint("tac gen")
     tac = prgm.to_tac()
 

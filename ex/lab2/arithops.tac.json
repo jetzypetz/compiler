@@ -1,15 +1,1 @@
-[{"proc": "@main", "body":
-    [{"opcode": "const", "args": [42], "result": "%0"}, 
-        {"opcode": "shr", "args": ["%0", 1], "result": "%1"}, 
-        {"opcode": "const", "args": ["%1"], "result": "%2"}, 
-        {"opcode": "add", "args": ["%2", 1], "result": "%3"}, 
-        {"opcode": "copy", "args": ["%3"], "result": "%4"}, 
-        {"opcode": "add", "args": ["%0", "%2"], "result": "%5"}, 
-        {"opcode": "print", "args": ["%5"], "result": null}, 
-        {"opcode": "sub", "args": ["%0", "%2"], "result": "%6"}, 
-        {"opcode": "print", "args": ["%6"], "result": null}, 
-        {"opcode": "mul", "args": ["%0", 3], "result": "%7"}, 
-        {"opcode": "add", "args": ["%7", "%2"], "result": "%8"}, 
-        {"opcode": "const", "args": ["%8"], "result": "%9"}, 
-        {"opcode": "mod", "args": ["%9", "%0"], "result": "%10"}, 
-        {"opcode": "print", "args": ["%10"], "result": null}]}]
+[{"proc": "@main", "body": [{"opcode": "const", "args": [42], "result": "%0"}, {"opcode": "shr", "args": ["%0", 1], "result": "%1"}, {"opcode": "const", "args": ["%1"], "result": "%2"}, {"opcode": "add", "args": ["%0", 1], "result": "%3"}, {"opcode": "copy", "args": ["%3"], "result": "%2"}]}]

@@ -28,7 +28,7 @@ class Tools:
         try:
             with open(filename, "r") as f:
                 if self.reporter.confirm(f"file {{{filename}}} already exists, "
-                                         "do you want to overwrite? [Y/n]"):
+                                         "do you want to overwrite? [Y/n] "):
                     with open(filename, "w") as f:
                         json.dump(data, f)
 
