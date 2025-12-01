@@ -1,1 +1,0 @@
-[{"proc": "@main", "body": [{"opcode": "const", "args": [42], "result": "%0"}, {"opcode": "shr", "args": ["%0", 1], "result": "%1"}, {"opcode": "const", "args": ["%1"], "result": "%2"}, {"opcode": "add", "args": ["%0", 1], "result": "%3"}, {"opcode": "copy", "args": ["%3"], "result": "%2"}]}]

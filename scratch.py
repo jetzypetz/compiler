@@ -76,6 +76,8 @@ def _main():
     abk = AsmGen.get_backend(args.arch)
     asm = abk.lower(tac)
 
+    print(asm)
+
     basename = os.path.splitext(args.input)[0]
 
     try:
