@@ -3,3 +3,5 @@ compilerenv/
 bx/__pycache__/
 bx/parser.out
 bx/parsetab.py
+ex/
+ref/
