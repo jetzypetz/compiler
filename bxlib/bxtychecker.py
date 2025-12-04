@@ -86,12 +86,12 @@ class TypeChecker:
         'cmp-greater-or-equal-than': ([I, I], B),
     }
 
-    def __init__(self, scope : Scope, procs : ProcSigMap, reporter : Reporter):
-        self.scope    = scope
-        self.procs    = procs
-        self.loops    = 0
-        self.proc     = None
-        self.reporter = reporter
+    def __init__(self,     scope : Scope, procs : ProcSigMap, reporter : Reporter):
+        self.scope        = scope
+        self.procs        = procs
+        self.loops        = 0
+        self.proc         = list()
+        self.reporter     = reporter
 
     def report(self, msg: str, position: Opt[Range] = None):
         self.reporter(msg, position = position)
@@ -106,14 +106,12 @@ class TypeChecker:
 
     @cl.contextmanager
     def in_proc(self, proc: ProcDecl):
-        assert(self.proc is None)
-
-        self.proc = proc
+        self.proc.append(proc)
         self.scope.open()
         try:
             yield self
         finally:
-            self.proc = None
+            self.proc.pop()
             self.scope.close()
 
     def check_local_free(self, name : Name):
@@ -206,8 +204,23 @@ class TypeChecker:
 
         expr.type_ = type_
 
-    def for_statement(self, stmt : Statement):
+    def for_statement(self, stmt : Statement): # TODO
         match stmt:
+            case ProcDecl(name, arguments, rettype, body):
+                with self.in_proc(stmt):
+                    for vnames, vtype_ in arguments:
+                        for vname in vnames:
+                            if self.check_local_free(vname):
+                                self.scope.push(vname.value, vtype_)
+                    self.for_statement(body)
+
+                    if retty is not None:
+                        if not self.has_return(body):
+                            self.report(
+                                'this function is missing a return statement',
+                                position = decl.position,
+                            )
+
             case VarDeclStatement(name, init, type_):
                 if self.check_local_free(name):
                     self.scope.push(name.value, type_)
@@ -243,19 +256,19 @@ class TypeChecker:
 
             case ReturnStatement(e):
                 if e is None:
-                    if self.proc.rettype is not None:
+                    if self.proc[-1].rettype is not None:
                         self.report(
                             'value-less return statement in a function',
                             position = stmt.position,
                         )
                 else:
-                    if self.proc.rettype is None:
+                    if self.proc[-1].rettype is None:
                         self.report(
                             'return statement in a subroutine',
                             position = stmt.position,
                         )
                     else:
-                        self.for_expression(e, etype = self.proc.rettype)
+                        self.for_expression(e, etype = self.proc[-1].rettype)
 
             case _:
                 print(stmt)

@@ -210,6 +210,10 @@ class Parser:
             position   = self._position(p),
         )
 
+    def p_stmt_procdecl(self, p): # allow procdecl as statement in block
+        """stmt : procdecl"""
+        p[0] = p[1]
+
     def p_stmt_if(self, p):
         """stmt : IF LPAREN expr RPAREN sblock stmt_elif"""
         p[0] = IfStatement(

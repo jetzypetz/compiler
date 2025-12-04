@@ -73,10 +73,11 @@ def _main():
 
     tac = MM.mm(prgm)
 
+    for t in tac:
+        print(t)
+
     abk = AsmGen.get_backend(args.arch)
     asm = abk.lower(tac)
-
-    print(asm)
 
     basename = os.path.splitext(args.input)[0]
 
