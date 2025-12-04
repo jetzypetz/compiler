@@ -71,6 +71,8 @@ def _main():
     if not tycheck(prgm, reporter = reporter):
         exit(1)
 
+    print("completed typechecking with no errors")
+
     tac = MM.mm(prgm)
 
     for t in tac:

@@ -18,7 +18,7 @@ class PreTyper:
 
     def pretype(self, prgm : Program) -> tuple[Scope, ProcSigMap]:
         scope = Scope()
-        procs = dict()
+        procs = Scope()
 
         for topdecl in prgm:
             match topdecl:
@@ -30,10 +30,10 @@ class PreTyper:
                         )
                         continue
 
-                    procs[name.value] = (
+                    procs.push(name.value, (
                         tuple(it.chain(*((x[1],) * len(x[0]) for x in arguments))),
                         Type.VOID if rettype is None else rettype
-                    )
+                    ))
 
                 case GlobVarDecl(name, init, type_):
                     if name.value in scope:
@@ -108,15 +108,20 @@ class TypeChecker:
     def in_proc(self, proc: ProcDecl):
         self.proc.append(proc)
         self.scope.open()
+        self.procs.open()
         try:
             yield self
         finally:
             self.proc.pop()
             self.scope.close()
+            self.procs.close()
 
     def check_local_free(self, name : Name):
         if self.scope.islocal(name.value):
-            self.report(f'duplicated variable declaration for {name.value}')
+            self.report(
+                f'duplicated variable declaration for {name.value}',
+                position = name.position
+            )
             return False
         return True
 
@@ -206,7 +211,8 @@ class TypeChecker:
 
     def for_statement(self, stmt : Statement): # TODO
         match stmt:
-            case ProcDecl(name, arguments, rettype, body):
+            case ProcDecl(name, arguments, retty, body):
+
                 with self.in_proc(stmt):
                     for vnames, vtype_ in arguments:
                         for vname in vnames:
@@ -220,6 +226,17 @@ class TypeChecker:
                                 'this function is missing a return statement',
                                 position = decl.position,
                             )
+
+                if self.procs.islocal(name.value):
+                    self.report(
+                        f'duplicated function declaration for {name.value}',
+                        position = name.position
+                    )
+                else:
+                    self.procs.push(name.value, (
+                        tuple(it.chain(*((x[1],) * len(x[0]) for x in arguments))),
+                        Type.VOID if retty is None else retty
+                    ))
 
             case VarDeclStatement(name, init, type_):
                 if self.check_local_free(name):
@@ -276,8 +293,9 @@ class TypeChecker:
 
     def for_block(self, block : Block):
         with self.scope.in_subscope():
-            for stmt in block:
-                self.for_statement(stmt)
+            with self.procs.in_subscope():
+                for stmt in block:
+                    self.for_statement(stmt)
 
     def for_topdecl(self, decl : TopDecl):
         match decl:
