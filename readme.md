@@ -97,3 +97,33 @@ Then, no matter where a function is being called, the call will be made to the c
     self.push('call', self._procs[proc.value], ...
 ```
 In fact, now that the function has a unique name in TAC, it can be added to the tac anywhere, as it can be accessed by all the lowered code (we have already checked for calls outside its block). Therefore, `self._proc` becomes a list as in TypeChecking, and the `TACProc` is appended ot the list. As soon as a function has been converted to tac, the tac can be added to the `self._tac` attribute for lowering and popped from `self._proc`.
+
+### 3. Assembly Generation
+
+Now comes the most problematic part. We have now created functions that should be able to access data that is not in their stack frame, but in the outer function's stack frame. In fact a program like so:
+
+```
+def increment(n: int) : int {
+    return (n + 1);
+}
+
+def apply_twice(x: int) : int {
+    return increment(increment(x));
+}
+
+def main() {
+    var y = 5 : int;
+
+    // A nested function that uses a captured variable
+    def add_y(n : int) : int {
+        return (n + y);
+    }
+
+    print(apply_twice(10)); // prints 12
+
+    // Pass another nested function that captures y
+    print(add_y(16)); // should print 16 + 5 = 21, prints 27
+}
+```
+
+fails on the last print, printing 27 instead of 21, because it is unable to access y correctly in `add_y`. In fact, by checking the generated assembly, we notice that it is accessing the address `-16(%rbp)` without having set it inside the function. The function in fact still believes this address in the stack has the value for y, but it has indeed been changed by the previous function. To fix this, nested functions need to have access to the variables defined outside them (and in future, also to functions). We have it would seem two options: pass any global variables accessed by a nested functions as params to the function, and return them all after, or use stack frame pointers (i dont know what these are).
