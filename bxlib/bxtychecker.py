@@ -209,7 +209,7 @@ class TypeChecker:
 
         expr.type_ = type_
 
-    def for_statement(self, stmt : Statement): # TODO
+    def for_statement(self, stmt : Statement):
         match stmt:
             case ProcDecl(name, arguments, retty, body):
 

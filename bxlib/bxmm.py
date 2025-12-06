@@ -13,6 +13,7 @@ from .bxtac   import *
 
 class MM:
     _counter = -1
+    _proc_counter = -1
 
     PRINTS = {
         Type.INT  : 'print_int',
@@ -20,9 +21,10 @@ class MM:
     }
 
     def __init__(self):
-        self._proc    = None
+        self._proc    = [] # changed
         self._tac     = []
         self._scope   = Scope()
+        self._procs   = Scope()
         self._loops   = []
 
     tac = property(lambda self: self._tac)
@@ -42,16 +44,21 @@ class MM:
         cls._counter += 1
         return f'.L{cls._counter}'
 
+    @classmethod
+    def fresh_proc_label(cls, procname : str): # changed
+        cls._proc_counter += 1
+        return f'{procname}_{cls._proc_counter}'
+
     def push(
         self,
         opcode     : str,
         *arguments : str | int,
         result     : Opt[str] = None,
     ):
-        self._proc.tac.append(TAC(opcode, list(arguments), result))
+        self._proc[-1].tac.append(TAC(opcode, list(arguments), result))
 
     def push_label(self, label: str):
-        self._proc.tac.append(f'{label}:')
+        self._proc[-1].tac.append(f'{label}:')
 
     @cl.contextmanager
     def in_loop(self, labels: tuple[str, str]):
@@ -72,33 +79,58 @@ class MM:
         for decl in prgm:
             match decl:
                 case ProcDecl(name, arguments, retty, body):
-                    assert(self._proc is None)
+                    if name.value == "main":
+                        self._procs.push(name.value, name.value)
+                    else:
+                        self._procs.push(name.value, self.fresh_proc_label(name.value)) # c
+
                     with self._scope.in_subscope():
+                        with self._procs.in_subscope(): # changed
+                            arguments = list(it.chain(*(x[0] for x in arguments)))
+
+                            self._proc.append(TACProc(
+                                name      = self._procs[name.value], # changed
+                                arguments = [f'%{x.value}' for x in arguments],
+                            ))
+
+                            for argument in arguments:
+                                self._scope.push(argument.value, f'%{argument.value}')
+
+                            self.for_statement(body)
+
+                            if name.value == 'main':
+                                self.for_statement(ReturnStatement(IntExpression(0)));
+
+                            assert(len(self._proc) != 0)
+                            self._tac.append(self._proc.pop()) # put in tac last TACProc
+
+    def for_block(self, block: Block):
+        with self._scope.in_subscope():
+            with self._procs.in_subscope(): # changed
+                for stmt in block:
+                    self.for_statement(stmt)
+
+    def for_statement(self, stmt: Statement):
+        match stmt:
+            case ProcDecl(name, arguments, retty, body): # changed
+                self._procs.push(name.value, self.fresh_proc_label(name.value))
+                with self._scope.in_subscope():
+                    with self._procs.in_subscope():
                         arguments = list(it.chain(*(x[0] for x in arguments)))
 
-                        self._proc = TACProc(
-                            name      = name.value,
+                        self._proc.append(TACProc(
+                            name      = self._procs[name.value],
                             arguments = [f'%{x.value}' for x in arguments],
-                        )
+                        ))
 
                         for argument in arguments:
                             self._scope.push(argument.value, f'%{argument.value}')
 
                         self.for_statement(body)
 
-                        if name.value == 'main':
-                            self.for_statement(ReturnStatement(IntExpression(0)));
+                        assert(len(self._proc) != 0)
+                        self._tac.append(self._proc.pop())
 
-                        self._tac.append(self._proc)
-                        self._proc = None
-
-    def for_block(self, block: Block):
-        with self._scope.in_subscope():
-            for stmt in block:
-                self.for_statement(stmt)
-
-    def for_statement(self, stmt: Statement):
-        match stmt:
             case VarDeclStatement(name, init):
                 self._scope.push(name.value, self.fresh_temporary())
                 temp = self.for_expression(init)
@@ -191,7 +223,7 @@ class MM:
                         self.push('param', i+1, temp)
                     if expr.type_ != Type.VOID:
                         target = self.fresh_temporary()
-                    self.push('call', proc.value, len(arguments), result = target)
+                    self.push('call', self._procs[proc.value], len(arguments), result = target) # changed
 
                 case PrintExpression(argument):
                     temp = self.for_expression(argument)
