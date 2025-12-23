@@ -27,6 +27,7 @@ class TAC:
     opcode    : str
     arguments : list[str | int]
     result    : Opt[str | int] = None
+    # depth?
 
     def tojson(self):
         return dict(
@@ -51,6 +52,7 @@ class TACProc:
         self.name      = name
         self.arguments = arguments
         self.tac       = []
+        # depth?
 
     def __repr__(self):
         aout = f"proc @{self.name}"
@@ -68,6 +70,7 @@ class TACVar:
     def __init__(self, name: str, value: int):
         self.name  = name
         self.value = value
+        # depth?
 
     def __repr__(self):
         return f"var @{self.name} = {self.value};"

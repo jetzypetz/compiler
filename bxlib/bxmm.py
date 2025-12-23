@@ -51,11 +51,12 @@ class MM:
 
     def push(
         self,
+        # depth,
         opcode     : str,
         *arguments : str | int,
         result     : Opt[str] = None,
     ):
-        self._proc[-1].tac.append(TAC(opcode, list(arguments), result))
+        self._proc[-1].tac.append(TAC(opcode, list(arguments), result)) # depth
 
     def push_label(self, label: str):
         self._proc[-1].tac.append(f'{label}:')
@@ -73,7 +74,7 @@ class MM:
             match decl:
                 case GlobVarDecl(name, init, type_):
                     assert(isinstance(init, IntExpression))
-                    self._tac.append(TACVar(name.value, init.value))
+                    self._tac.append(TACVar(name.value, init.value)) # depth
                     self._scope.push(name.value, f'@{name.value}')
 
         for decl in prgm:
@@ -88,7 +89,7 @@ class MM:
                         with self._procs.in_subscope(): # changed
                             arguments = list(it.chain(*(x[0] for x in arguments)))
 
-                            self._proc.append(TACProc(
+                            self._proc.append(TACProc( # depth
                                 name      = self._procs[name.value], # changed
                                 arguments = [f'%{x.value}' for x in arguments],
                             ))
@@ -118,7 +119,7 @@ class MM:
                     with self._procs.in_subscope():
                         arguments = list(it.chain(*(x[0] for x in arguments)))
 
-                        self._proc.append(TACProc(
+                        self._proc.append(TACProc( # depth
                             name      = self._procs[name.value],
                             arguments = [f'%{x.value}' for x in arguments],
                         ))
@@ -221,6 +222,7 @@ class MM:
                     for i, argument in enumerate(arguments):
                         temp = self.for_expression(argument)
                         self.push('param', i+1, temp)
+                    # TODO: create and push static link - save here the place for accessing captured vars
                     if expr.type_ != Type.VOID:
                         target = self.fresh_temporary()
                     self.push('call', self._procs[proc.value], len(arguments), result = target) # changed

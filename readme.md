@@ -100,30 +100,38 @@ In fact, now that the function has a unique name in TAC, it can be added to the 
 
 ### 3. Assembly Generation
 
-Now comes the most problematic part. We have now created functions that should be able to access data that is not in their stack frame, but in the outer function's stack frame. In fact a program like so:
+Now comes the most problematic part. We have now created functions that should be able to access data that is not in their stack frame, but we haven't yet created the static links that connect a function with the stack frame of previous functions.
 
+#### Intention
+
+The first hurdle is to understand that static links are created in the stack between a caller and callee, but the link itself does not necessarily relate the callee to the caller, rather to its lexicographic parent. Specifically, our intention is to have the static link point to the base of the lexico. parent's stack frame. As the caller function will be either a sibling, or a child of a sibling of the callee, they will share (up to following back static links) an ancestor, which is the callee's parent. We can subsequently create a recursive algorithm to follow back the static links of the callee to create the static link of the caller, which only requires us to add a `.depth` parameter to all functions and instructions in tac, which only counts nesting of function definitions (not blocks). We will use %r12 for static link computations, as it is unused otherwise. Here is a pseudocode sketch of the algorithm:
+
+```py
+# Let c be a call to the function g, made in the function f
+
+# you cannot call a deeper function than yourself, as it wont be in scope
+assert(c.depth >= g.depth)
+
+if c.depth == g.depth:
+
+    # then g must be f's direct lexico. parent, so
+    static link = %rbp
+
+    # rbp, before function call, will point to the parent's stack frame
+
+else:
+    n = g.depth - c.depth
+    
+    %r12 = %rbp
+
+    for i in range(n):
+
+        # 16(%r12) is where we find the next static link
+        %r12 = 16(%r12)
+
+    static link = %r12
 ```
-def increment(n: int) : int {
-    return (n + 1);
-}
 
-def apply_twice(x: int) : int {
-    return increment(increment(x));
-}
+#### Implementation
 
-def main() {
-    var y = 5 : int;
 
-    // A nested function that uses a captured variable
-    def add_y(n : int) : int {
-        return (n + y);
-    }
-
-    print(apply_twice(10)); // prints 12
-
-    // Pass another nested function that captures y
-    print(add_y(16)); // should print 16 + 5 = 21, prints 27
-}
-```
-
-fails on the last print, printing 27 instead of 21, because it is unable to access y correctly in `add_y`. In fact, by checking the generated assembly, we notice that it is accessing the address `-16(%rbp)` without having set it inside the function. The function in fact still believes this address in the stack has the value for y, but it has indeed been changed by the previous function. To fix this, nested functions need to have access to the variables defined outside them (and in future, also to functions). We have it would seem two options: pass any global variables accessed by a nested functions as params to the function, and return them all after, or use stack frame pointers (i dont know what these are).
