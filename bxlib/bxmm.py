@@ -26,6 +26,7 @@ class MM:
         self._scope   = Scope()
         self._procs   = Scope()
         self._loops   = []
+        self.depths   = dict()
 
     tac = property(lambda self: self._tac)
 
@@ -51,12 +52,12 @@ class MM:
 
     def push(
         self,
-        # depth,
-        opcode     : str,
-        *arguments : str | int,
-        result     : Opt[str] = None,
+        opcode      : str,
+        *arguments  : str | int,
+        result      : Opt[str] = None,
+        link_depth  : Opt[int] = None,
     ):
-        self._proc[-1].tac.append(TAC(opcode, list(arguments), result)) # depth
+        self._proc[-1].tac.append(TAC(opcode, list(arguments), result, link_depth))
 
     def push_label(self, label: str):
         self._proc[-1].tac.append(f'{label}:')
@@ -74,7 +75,7 @@ class MM:
             match decl:
                 case GlobVarDecl(name, init, type_):
                     assert(isinstance(init, IntExpression))
-                    self._tac.append(TACVar(name.value, init.value)) # depth
+                    self._tac.append(TACVar(name.value, init.value))
                     self._scope.push(name.value, f'@{name.value}')
 
         for decl in prgm:
@@ -85,13 +86,17 @@ class MM:
                     else:
                         self._procs.push(name.value, self.fresh_proc_label(name.value)) # c
 
+                    # depth for static link calculation
+                    self.depths[self._procs[name.value]] = 0
+
                     with self._scope.in_subscope():
                         with self._procs.in_subscope(): # changed
                             arguments = list(it.chain(*(x[0] for x in arguments)))
 
-                            self._proc.append(TACProc( # depth
-                                name      = self._procs[name.value], # changed
-                                arguments = [f'%{x.value}' for x in arguments],
+                            self._proc.append(TACProc(
+                                depth       = 0,
+                                name        = self._procs[name.value], # changed
+                                arguments   = [f'%{x.value}' for x in arguments],
                             ))
 
                             for argument in arguments:
@@ -103,25 +108,29 @@ class MM:
                                 self.for_statement(ReturnStatement(IntExpression(0)));
 
                             assert(len(self._proc) != 0)
-                            self._tac.append(self._proc.pop()) # put in tac last TACProc
+                            self._tac.append(self._proc.pop()) # put TACProc in tac
 
     def for_block(self, block: Block):
         with self._scope.in_subscope():
-            with self._procs.in_subscope(): # changed
+            with self._procs.in_subscope():
                 for stmt in block:
                     self.for_statement(stmt)
 
     def for_statement(self, stmt: Statement):
         match stmt:
-            case ProcDecl(name, arguments, retty, body): # changed
+            case ProcDecl(name, arguments, retty, body):
                 self._procs.push(name.value, self.fresh_proc_label(name.value))
+
+                self.depths[self._procs[name.value]] = len(self._proc)
+
                 with self._scope.in_subscope():
                     with self._procs.in_subscope():
                         arguments = list(it.chain(*(x[0] for x in arguments)))
 
-                        self._proc.append(TACProc( # depth
-                            name      = self._procs[name.value],
-                            arguments = [f'%{x.value}' for x in arguments],
+                        self._proc.append(TACProc(
+                            depth       = len(self._proc),
+                            name        = self._procs[name.value],
+                            arguments   = [f'%{x.value}' for x in arguments],
                         ))
 
                         for argument in arguments:
@@ -133,7 +142,7 @@ class MM:
                         self._tac.append(self._proc.pop())
 
             case VarDeclStatement(name, init):
-                self._scope.push(name.value, self.fresh_temporary())
+                self._scope.push(name.value, self.fresh_temporary()+f":{len(self._proc)}")
                 temp = self.for_expression(init)
                 self.push('copy', temp, result = self._scope[name.value])
 
@@ -222,10 +231,15 @@ class MM:
                     for i, argument in enumerate(arguments):
                         temp = self.for_expression(argument)
                         self.push('param', i+1, temp)
-                    # TODO: create and push static link - save here the place for accessing captured vars
                     if expr.type_ != Type.VOID:
                         target = self.fresh_temporary()
-                    self.push('call', self._procs[proc.value], len(arguments), result = target) # changed
+
+                    callee_depth = self.depths[self._procs[proc.value]]
+                    caller_depth = self.depths[self._proc[-1].name]
+
+                    link_depth = None if callee_depth==0 else caller_depth - callee_depth + 1
+
+                    self.push('call', self._procs[proc.value], len(arguments), result = target, link_depth = link_depth)
 
                 case PrintExpression(argument):
                     temp = self.for_expression(argument)

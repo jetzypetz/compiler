@@ -16,13 +16,19 @@ class AsmGen(abc.ABC):
         self._asm     = []
 
     def _temp(self, temp):
+        parts = temp.split(':')
+        if len(parts) == 2:
+            temp, link_depth = parts[0], self.curr_depth - int(parts[1])
+        else:
+            temp, link_depth = temp, 0
+
         if temp.startswith('@'):
-            prelude, temp = self._format_temp(temp[1:])
+            prelude, temp = self._format_temp(temp[1:], None)
         elif temp in self._tparams:
-            prelude, temp = [], self._format_param(self._tparams[temp])
+            prelude, temp = [], self._format_param_with_static_link(self._tparams[temp])
         else:
             index = self._temps.setdefault(temp, len(self._temps))
-            prelude, temp = self._format_temp(index)
+            prelude, temp = self._format_temp(index, link_depth)
         for i in prelude:
             self._emit(*i)
         return temp
@@ -35,6 +41,10 @@ class AsmGen(abc.ABC):
     def _format_param(self, index):
         pass
 
+    @abc.abstractmethod
+    def _format_param_with_static_link(self, index):
+        pass
+
     def __call__(self, instr: TAC | str):
         if isinstance(instr, str):
             self._asm.append(instr)
@@ -42,6 +52,11 @@ class AsmGen(abc.ABC):
 
         opcode = instr.opcode
         args   = instr.arguments[:]
+
+        if opcode == 'call':
+            args.append(instr.link_depth)
+        else:
+            assert(instr.link_depth is None)
 
         if instr.result is not None:
             args.append(instr.result)
@@ -83,19 +98,34 @@ class AsmGen_x64_Linux(AsmGen):
     SYSTEM  = 'Linux'
     MACHINE = 'x86_64'
     PARAMS  = ['%rdi', '%rsi', '%rdx', '%rcx', '%r8', '%r9']
+    depths  = dict()
 
     def __init__(self):
         super().__init__()
         self._params = []
         self._endlbl = None
 
-    def _format_temp(self, index):
+    def _format_temp(self, index, link_depth):
         if isinstance(index, str):
             return [], f'{index}(%rip)'
-        return [], f'-{8*(index+1)}(%rbp)'
+
+        assert(link_depth is not None)
+
+        if link_depth == 0:
+            return [], f'-{8*(index+1)}(%rbp)'
+
+        prelude = [['movq', '%rbp', '%r12']]
+
+        for i in range(link_depth):
+            prelude.append(['movq', '24(%r12)', '%r12'])
+
+        return prelude, f'-{8*(index+1)}(%r12)'
 
     def _format_param(self, index):
         return f'{8*(index+2)}(%rbp)'
+
+    def _format_param_with_static_link(self, index):
+        return f'{8*(index+4)}(%rbp)'
 
     def _emit_const(self, ctt, dst):
         self._emit('movq', f'${ctt}', self._temp(dst))
@@ -193,7 +223,7 @@ class AsmGen_x64_Linux(AsmGen):
         assert(len(self._params)+1 == i)
         self._params.append(arg)
 
-    def _emit_call(self, lbl, arg, ret = None):
+    def _emit_call(self, lbl, arg, link_depth, ret = None):
         assert(arg == len(self._params))
 
         for i, x in enumerate(self._params[:6]):
@@ -207,10 +237,35 @@ class AsmGen_x64_Linux(AsmGen):
         for x in self._params[6:][::-1]:
             self._emit('pushq', self._temp(x))
 
+        # static link
+        # can change to only occur if captured vars
+        if link_depth is not None:
+
+            if link_depth == 0:
+                self._emit('pushq', '%rbp')
+            else:
+                self._emit('movq', '%rbp', '%r12')
+
+                for i in range(link_depth):
+                    self._emit('movq', '24(%r12)', '%r12')
+
+                self._emit('pushq', '%r12')
+
+            self._emit('pushq', '$0')
+
+        else: # to always have a static link
+            self._emit('pushq', '$0')
+            self._emit('pushq', '$0')
+
         self._emit('callq', lbl)
 
         if qarg > 0:
             self._emit('addq', f'${qarg + qarg & 0x1}', '%rsp')
+
+        if link_depth is not None:
+            self._emit('addq', '$16', '%rsp')
+        else: # to always have a static link
+            self._emit('addq', '$16', '%rsp')
 
         if ret is not None:
             self._emit('movq', '%rax', self._temp(ret))
@@ -235,7 +290,8 @@ class AsmGen_x64_Linux(AsmGen):
 
                 return emitter._asm
 
-            case TACProc(name, arguments, ptac):
+            case TACProc(depth, name, arguments, ptac):
+                emitter.curr_depth = depth + 1
                 emitter._endlbl = f'.E_{name}'
 
                 for i in range(min(6, len(arguments))):
