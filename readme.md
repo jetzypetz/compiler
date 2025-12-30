@@ -41,6 +41,8 @@ The `_emit_callfatptr` method handles indirect calls. It extracts the function a
 ## Summary
 This project successfully implemented two advanced language features: lexically scoped nested functions and first-class functions. The solution involved coordinated changes across the entire compiler pipeline, introducing mechanisms for scope management, static link generation, and fat pointer creation to correctly handle variable capture and higher-order function calls.
 
+This overview was written with the help of AI, based solely on the full notes (written completely without AI) below.
+
 # Implementation of locally defined functions
 
 ## Steps
