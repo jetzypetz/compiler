@@ -12,19 +12,21 @@ from .bxerrors import Reporter
 class Lexer:
     keywords = {
         x: x.upper() for x in (
-            'bool'     ,
-            'break'    ,
-            'continue' ,
-            'def'      ,
-            'else'     ,
-            'false'    ,
-            'if'       ,
-            'int'      ,
-            'print'    ,
-            'return'   ,
-            'true'     ,
-            'var'      ,
-            'while'    ,
+            'void'      ,
+            'function'  ,
+            'bool'      ,
+            'break'     ,
+            'continue'  ,
+            'def'       ,
+            'else'      ,
+            'false'     ,
+            'if'        ,
+            'int'       ,
+            'print'     ,
+            'return'    ,
+            'true'      ,
+            'var'       ,
+            'while'     ,
         )
     }
     
@@ -33,35 +35,36 @@ class Lexer:
         'NUMBER',               # : int
 
         # Punctuation
-        'LPAREN'   ,
-        'RPAREN'   ,
-        'LBRACE'   ,
-        'RBRACE'   ,
-        'COLON'    ,
-        'SEMICOLON',
-        'COMMA'    ,
+        'LPAREN'    ,
+        'RPAREN'    ,
+        'LBRACE'    ,
+        'RBRACE'    ,
+        'COLON'     ,
+        'SEMICOLON' ,
+        'COMMA'     ,
+        'ARROW'     ,
 
-        'AMP'      ,
-        'AMPAMP'   ,
-        'BANG'     ,
-        'BANGEQ'   ,
-        'DASH'     ,
-        'EQ'       ,
-        'EQEQ'     ,
-        'GT'       ,
-        'GTEQ'     ,
-        'GTGT'     ,
-        'HAT'      ,
-        'LT'       ,
-        'LTEQ'     ,
-        'LTLT'     ,
-        'PCENT'    ,
-        'PIPE'     ,
-        'PIPEPIPE' ,
-        'PLUS'     ,
-        'SLASH'    ,
-        'STAR'     ,
-        'TILD'     ,
+        'AMP'       ,
+        'AMPAMP'    ,
+        'BANG'      ,
+        'BANGEQ'    ,
+        'DASH'      ,
+        'EQ'        ,
+        'EQEQ'      ,
+        'GT'        ,
+        'GTEQ'      ,
+        'GTGT'      ,
+        'HAT'       ,
+        'LT'        ,
+        'LTEQ'      ,
+        'LTLT'      ,
+        'PCENT'     ,
+        'PIPE'      ,
+        'PIPEPIPE'  ,
+        'PLUS'      ,
+        'SLASH'     ,
+        'STAR'      ,
+        'TILD'      ,
     ) + tuple(keywords.values())
 
     t_LPAREN    = re.escape('(')
@@ -71,6 +74,7 @@ class Lexer:
     t_COLON     = re.escape(':')
     t_SEMICOLON = re.escape(';')
     t_COMMA     = re.escape(',')
+    t_ARROW     = re.escape('->')
 
     t_AMP       = re.escape('&')
     t_AMPAMP    = re.escape('&&')

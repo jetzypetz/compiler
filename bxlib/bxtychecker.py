@@ -125,6 +125,15 @@ class TypeChecker:
             return False
         return True
 
+    def check_local_proc_free(self, name : Name): # unused?
+        if self.procs.islocal(name.value):
+            self.report(
+                f'duplicated function declaration for {name.value}',
+                position = name.position
+            )
+            return False
+        return True
+
     def check_local_bound(self, name : Name):
         if name.value not in self.scope:
             self.report(
@@ -133,6 +142,15 @@ class TypeChecker:
             )
             return None
         return self.scope[name.value]
+
+    def check_local_proc_bound(self, name : Name):
+        if name.value not in self.procs:
+            self.report(
+                f'missing function declaration for {name.value}',
+                position = name.position,
+            )
+            return None
+        return self.procs[name.value]
 
     def check_integer_constant_range(self, value : int):
         if value not in range(-(1 << 63), 1 << 63):
@@ -145,8 +163,14 @@ class TypeChecker:
 
         match expr:
             case VarExpression(name):
-                if self.check_local_bound(name):
-                    type_ = self.scope[name.value]
+                match etype:
+                    case FunctionType(arg_types, return_type):
+                        if self.check_local_proc_bound(name):
+                            (a, r)  = self.procs[name.value]
+                            type_   = FunctionType(a, r)
+                    case _:
+                        if self.check_local_bound(name):
+                            type_   = self.scope[name.value]
 
             case BoolExpression(_):
                 type_ = Type.BOOL
@@ -215,9 +239,15 @@ class TypeChecker:
 
                 with self.in_proc(stmt):
                     for vnames, vtype_ in arguments:
-                        for vname in vnames:
-                            if self.check_local_free(vname):
-                                self.scope.push(vname.value, vtype_)
+                        match vtype_:
+                            case FunctionType(arg_types, return_type):
+                                for vname in vnames:
+                                    if self.check_local_proc_free(vname):
+                                        self.procs.push(vname.value, (arg_types, return_type))
+                            case _:
+                                for vname in vnames:
+                                    if self.check_local_free(vname):
+                                        self.scope.push(vname.value, vtype_)
                     self.for_statement(body)
 
                     if retty is not None:
@@ -302,9 +332,16 @@ class TypeChecker:
             case ProcDecl(name, arguments, retty, body):
                 with self.in_proc(decl):
                     for vnames, vtype_ in arguments:
-                        for vname in vnames:
-                            if self.check_local_free(vname):
-                                self.scope.push(vname.value, vtype_)
+                        match vtype_:
+                            case FunctionType(arg_types, return_type):
+                                for vname in vnames:
+                                    if self.check_local_proc_free(vname):
+                                        self.procs.push(vname.value, (arg_types, return_type))
+                            case _:
+                                for vname in vnames:
+                                    if self.check_local_free(vname):
+                                        self.scope.push(vname.value, vtype_)
+
                     self.for_statement(body)
 
                     if retty is not None:

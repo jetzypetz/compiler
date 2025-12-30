@@ -22,6 +22,21 @@ class Type(enum.Enum):
             case self.BOOL:
                 return 'bool'
 
+@dc.dataclass
+class FunctionType():
+    arg_types   : tuple
+    return_type : Type
+
+    __match_args__ = ("arg_types", "return_type")
+
+    def __eq__(self, other):
+        if isinstance(other, FunctionType):
+            return self.arg_types == other.arg_types and self.return_type == other.return_type
+        return False
+
+    def __hash__(self):
+        return hash((self.arg_types, self.return_type))
+
 # --------------------------------------------------------------------
 @dc.dataclass
 class Range:

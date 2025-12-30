@@ -1,3 +1,46 @@
+# Overview
+
+## 1. Support for Locally Defined Functions
+
+The first major goal was to allow function definitions within other functions at arbitrary nesting depths.
+
+### Parsing
+The parser was modified to accept `ProcDecl` (procedure declarations) as valid statements within blocks. This simple change ensured that nested function definitions could be represented in the Abstract Syntax Tree (AST) without syntax errors.
+
+### Type Checking
+Significant changes were made to the type checker to handle nested scopes. The context for tracking the current function was changed from a single `self.proc` variable to a stack (`self.proc` list). A `Scope` object (`self.procs`) was introduced to manage the visibility of nested function names, ensuring functions are accessible only within their defining block and that variable references are correctly resolved to outer scopes. Return type checking was adjusted to work with this nested context.
+
+### TAC (Three-Address Code) Generation
+To generate unique labels for nested functions that may share the same name, a `Scope` object (`self._procs`) was implemented to map source function names to unique TAC labels. The `fresh_proc_label` method was updated to append a counter, guaranteeing label uniqueness across all scopes. A stack (`self._proc` list) was also used during TAC generation to track the current nesting depth of function definitions.
+
+### Assembly Generation & Static Links
+The core challenge was generating correct assembly to allow nested functions to access variables from their enclosing (lexical parent) functions. This requires creating *static links* in the stack frame. An algorithm was designed where the static link in a callee's frame points to the base pointer (`%rbp`) of its lexical parent's frame.
+
+To implement this, each function call in the TAC was annotated with a `link_depth`—the number of static link traversals needed to reach the callee's parent frame from the caller's frame. During assembly generation, this `link_depth` dictates a sequence of `movq` instructions that walk the chain of static links (stored at offset `16(%r12)`) to find the correct base pointer before setting up the new stack frame. Temporary variable names in TAC were also annotated with their definition depth (e.g., `temp:2`) so the assembly generator knows how many links to traverse to access a captured variable.
+
+## 2. Support for Functions as Parameters
+
+The second goal was to enable functions to be passed as arguments to other functions, supporting higher-order programming.
+
+### Parsing
+The grammar was extended with new `function_type` rules and keywords (`function`, `void`, `ARROW`). A new `FunctionType` AST node was created to represent the types of these parameters, encapsulating their argument and return types.
+
+### Type Checking
+The type checker was enhanced to differentiate between variable and function parameters within argument lists. Function parameters are registered in the `self.procs` scope, while regular variables go into `self.scope`. When a `VarExpression` is type-checked in a context expecting a `FunctionType`, the checker now looks it up in `self.procs` instead of `self.scope`. Equality for `FunctionType` objects was implemented to ensure type compatibility.
+
+### TAC Generation & Fat Pointers
+Passing a function as a parameter requires creating a *fat pointer*—a structure containing both the function's code address and the static link needed for its execution context. A new `fatptr` TAC instruction was introduced. This instruction, given a function label and a `link_depth`, creates a fat pointer in a temporary location.
+
+When a call is made through a function parameter (an indirect call), a new `callfatptr` TAC instruction is used instead of a regular `call`. This instruction takes the fat pointer's temporary as an operand, from which it will extract both the function address and the correct static link during assembly generation.
+
+### Assembly Generation for Fat Pointers
+The assembly generator was extended with `_emit_fatptr` and `_emit_callfatptr` methods. The `_emit_fatptr` method allocates space on the stack for the fat pointer structure (function address and static link) and initializes it by computing the required static link using the provided `link_depth`.
+
+The `_emit_callfatptr` method handles indirect calls. It extracts the function address and static link from the fat pointer structure, pushes the static link onto the stack to set up the callee's context, and then performs an indirect call (`callq *(%r12)`). This ensures the called function executes with access to the variables from its original lexical scope, not the scope of the call site.
+
+## Summary
+This project successfully implemented two advanced language features: lexically scoped nested functions and first-class functions. The solution involved coordinated changes across the entire compiler pipeline, introducing mechanisms for scope management, static link generation, and fat pointer creation to correctly handle variable capture and higher-order function calls.
+
 # Implementation of locally defined functions
 
 ## Steps
@@ -264,3 +307,259 @@ Then we give `TACProc`s a depth in the maximal munch:
 and we make sure formatting of params takes into consideration the extra space of a static link when there is one. to do this we keep track of whether there is a static link
 
 For now, we always have a static link, to see if this works.
+
+# Function Parameters
+
+Now we look at each step required for accepting functions as parameters for functions.
+
+## Steps
+
+### Parsing
+
+#### Intention
+
+Specifically for function arguments, we want to accept a new type, which is the `function_type`.
+
+#### Implementation
+
+After defining new keywords `void`, `function` and `ARROW` in the lexer, we use them in the parser to capture function types:
+
+```py
+(line 301, bxparser.py)
+
+
+    def p_arg_type(self, p):
+        """arg_type : type
+                    | function_type"""
+        p[0] = p[1]
+
+    def p_arg_types_1(self, p):
+        """arg_types_1  : arg_type
+                        | arg_types_1 COMMA arg_type"""
+        if len(p) == 2:
+            p[0] = [p[1]]
+        else:
+            p[0] = p[1]
+            p[1].append(p[3])
+
+    def p_arg_types(self, p):
+        """arg_types    :
+                        | arg_types_1"""
+        p[0] = [] if len(p) == 1 else p[1]
+
+    def p_function_return_type(self, p):
+        """function_return_type : type"""
+        p[0] = p[1]
+
+    def p_function_return_type(self, p):
+        """function_return_type : VOID"""
+        p[0] = Type.VOID
+
+    def p_function_type(self, p):
+        """function_type : FUNCTION LPAREN arg_types RPAREN ARROW function_return_type"""
+        p[0] = FunctionType(
+                arg_types   = p[3],
+                return_type = p[6],
+        )
+```
+
+And create the class to describe the function parameter in the AST.
+
+```py
+(line 25, bxast.py)
+
+@dc.dataclass
+class FunctionType():
+    arg_types   : list
+    return_type : Type
+```
+
+As for Calls, they already accept `Name`s in the form of `VarExpression`s, so any function being passed will initally be encoded in the tree as a `VarExpression`.
+
+### Type Checking
+
+#### Intention
+
+Now that the object has been created, let us
+    (a) allow function parameters to be passed into scope
+    (b) check that the functions match the required arg and return types
+    (c) check that function calls match the return values and args
+
+My first thought is to follow a similar process with function parameters as with normal parameters, but using the `self.procs` Scope object for them as they will be used as Procs.
+
+#### Implementation
+
+We write parallel methods `self.check_local_proc_free` (like `self.check_local_free`) and `self.check_local_proc_bound` (like `self.check_local_bound`), that are the same as their counterparts, just referring to the `self.procs` Scope object, rather than `self.scope` (for vars).
+
+(a) we differentiate `ProcDecl` arguments by type, and push them to either `.procs` or `.scope`:
+
+```py
+(line 223, bxtychecker.py)
+
+    case ProcDecl(name, arguments, retty, body):
+        ...
+            for vnames, vtype_ in arguments:
+                match vtype_:
+                    case FunctionType(arg_types, return_type):
+                        for vname in vnames:
+                            if self.check_local_proc_free(vname):
+                                self.procs.push(vname.value, (arg_types, return_type))
+                    case _:
+                        for vname in vnames:
+                            if self.check_local_free(vname):
+                                self.scope.push(vname.value, vtype_)
+```
+
+(b) once the functions are in the scope, they will be correctly typechecked
+
+(c) for function calls, arguments are typechecked with the call to `for_expression`
+
+```py
+(line 195, bxtychecker.py)
+
+
+    for i, a in enumerate(arguments):
+        self.for_expression(a, atypes[i] if i in range(len(atypes)) else None)
+```
+
+and in the AST, function parameters are captured as `VarExpression`s. Therefore, we simply differentiate `VarExpression`s by their expected type to know whether they should be treated as a function or a variable:
+
+```py
+(line 156, bxtychecker.py)
+
+    case VarExpression(name):
+        match etype:
+            case FunctionType(arg_types, return_type):
+                if self.check_local_proc_bound(name):
+                    (a, r)  = self.procs[name.value]
+                    type_   = FunctionType(a, r)
+            case _:
+                if self.check_local_bound(name):
+                    type_ = self.scope[name.value]
+```
+
+Then `type_` is a `FunctionType` and gets compared to `etype`. In the `FunctionType` class, we implement equality.
+
+### TAC Generation
+
+Now we must focus on passing the necessary information for building the fat pointer over to the assembly in tac, where scope and type information is lost. My first idea is to pass TAC objects with new opcodes.
+
+#### Intention
+
+(a) when a function is passed, a fatpointer is created. 'fatptr', which takes arguments that will allow it to build the fat pointer. these are going to be probably the function (label) name, and its depth, or relative depth, so that we can in the asmgen know how far back to go to build up the static link part of the fat pointer, and returns to a temporary. it's temporary will be passed as a parameter in a 'param' tac object
+
+(b) in a higher order function, when a function parameter is used, the call is done indirectly. i.e. a 'callfatptr', when a fat pointer is called, so that the asm knows to not blindly call the proc's name, and calculate a new static link for it, because the proc's name is not going to have an associated proc in _procs, nor in depths. instead, here it's going to call the instruction pointer in the fat pointer, and push the static link from the fat pointer.
+
+#### Implementation
+
+(a) when a function is passed as a parameter, we create the fat pointer:
+
+```py
+(line 218, bxmm.py)
+
+    case VarExpression(name):
+        # function being passed to call
+        if isinstance(expr.type_, FunctionType):
+            target = self.fresh_temporary()
+            f_label = self._procs[name.value]
+
+            callee_depth = self.depths[f_label]
+            caller_depth = self.
+
+            link_depth = None if callee_depth==0 else caller_depth - callee_depth + 1
+
+            self.push('fatptr', f_label, result = target, link_depth = link_depth)
+        else:
+            target = self._scope[name.value]
+```
+
+(b) when a function uses a function parameter, we make an indirect call to the fat pointer pointed to in a parameter:
+
+```py
+(line 243, bxmm.py)
+
+    case CallExpression(proc, arguments):
+        if f"%{proc.value}" in self._proc[-1].arguments:
+
+            fatptr_temp = self._scope[proc.value]
+
+            for i, argument in enumerate(arguments):
+                temp = self.for_expression(argument)
+                self.push('param', i+1, temp)
+            if expr.type_ != Type.VOID:
+                target = self.fresh_temporary()
+
+            self.push('callfatptr', fatptr_temp, len(arguments), result = target)
+        else:
+            ...
+```
+
+### Assembly
+
+#### Intention
+
+We need to process the new tac objects 'fatptr', and 'callfatptr'. also we need to see if we need to change indexing for parameters, but i don't think so because the parameters passed are really just pointers to the fat pointers, so they have just one quadword of size, not messing up the indexing. However, we might have to identify which parameter is a function to process parameters differently. otherwise, we only need to turn the pointer in the parameter into a fatpointer when a callfatptr asks for it, that way we know where to go and know that it is a fatptr.
+
+#### Implementation
+
+for callfatptrs:
+
+```py
+(line 269, bxasmgen.py)
+
+    def _emit_callfatptr(fatptr_temp, arg, ret = None):
+        # extract function address from fatptr
+        self._emit('movq', self._temp(fatptr_temp), '%r12')
+
+        assert(arg == len(self._params))
+
+        for i, x in enumerate(self._params[:6]):
+            self._emit('movq', self._temp(x), self.PARAMS[i])
+
+        qarg = 0 if arg <= 6 else arg - 6
+
+        if qarg & 0x1:
+            self._emit('subq', '$8', '%rsp')
+
+        for x in self._params[6:][::-1]:
+            self._emit('pushq', self._temp(x))
+
+        self._emit('pushq', '-8(%r12)') # static link put on stack
+        self._emit('pushq', '$0')
+
+        self._emit('callq', '*(%r12)')
+
+        if qarg > 0:
+            self._emit('addq', f'${qarg + qarg & 0x1}', '%rsp')
+
+        self._emit('addq', '$16', '%rsp')
+
+        if ret is not None:
+            self._emit('movq', '%rax', self._temp(ret))
+
+        self._params = []
+```
+
+As for fatptr creation, we create the spaces in stack and create the fatptr object. Its last quadword can be placed in registers, becoming a pointer to the full fatptr.
+
+```py
+(line 308, bxasmgen.py)
+
+    def _emit_fatptr(self, f_label, link_depth, dst):
+        # create the fat pointer at dst
+        self._emit('leaq', self._temp(dst, size = 3), '%r13')
+
+        self._emit('movq', '%r13', '(%r13)')
+        self._emit('subq', '$8', '(%r13)')
+
+        # self._emit('movq', f"${f_label}", '-8(%r13)')
+        self._emit('leaq', f"{f_label}(%rip)", '%rax')
+        self._emit('movq', '%rax', '-8(%r13)')
+        
+        self._emit('movq', '%rbp', '%r12')
+
+        for i in range(link_depth):
+            self._emit('movq', '24(%r12)', '%r12')
+
+        self._emit('movq', '%r12', '-16(%r13)')
+```

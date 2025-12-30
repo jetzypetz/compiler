@@ -41,6 +41,8 @@ def parse_args():
 # Main entry point
 
 def _main():
+    os.environ['has_function_parameters'] = 'false'
+
     args = parse_args()
 
     if args.arch is None:

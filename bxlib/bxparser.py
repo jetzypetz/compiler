@@ -1,5 +1,6 @@
 # --------------------------------------------------------------------
 import ply.yacc
+import os
 
 from .bxast    import *
 from .bxerrors import Reporter
@@ -298,8 +299,43 @@ class Parser:
             p[0] = p[1]
             p[1].append(p[3])
 
+    def p_arg_type(self, p):
+        """arg_type : type
+                    | function_type"""
+        p[0] = p[1]
+
+    def p_arg_types_1(self, p):
+        """arg_types_1  : arg_type
+                        | arg_types_1 COMMA arg_type"""
+        if len(p) == 2:
+            p[0] = [p[1]]
+        else:
+            p[0] = p[1]
+            p[1].append(p[3])
+
+    def p_arg_types(self, p):
+        """arg_types    :
+                        | arg_types_1"""
+        p[0] = [] if len(p) == 1 else p[1]
+
+    def p_function_return_type(self, p):
+        """function_return_type : type"""
+        p[0] = p[1]
+
+    def p_function_return_type_void(self, p):
+        """function_return_type : VOID"""
+        p[0] = Type.VOID
+
+    def p_function_type(self, p):
+        """function_type : FUNCTION LPAREN arg_types RPAREN ARROW function_return_type"""
+        os.environ['has_function_parameters'] = 'true'
+        p[0] = FunctionType(
+                arg_types   = tuple(p[3]),
+                return_type = p[6],
+        )
+
     def p_arg(self, p):
-        """arg : names_comma1 COLON type"""
+        """arg : names_comma1 COLON arg_type"""
         p[0] = (p[1], p[3])
 
     def p_args_1(self, p):

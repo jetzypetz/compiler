@@ -134,7 +134,7 @@ class MM:
                         ))
 
                         for argument in arguments:
-                            self._scope.push(argument.value, f'%{argument.value}')
+                            self._scope.push(argument.value, f'%{argument.value}:{len(self._proc)}')
 
                         self.for_statement(body)
 
@@ -216,7 +216,20 @@ class MM:
         else:
             match expr:
                 case VarExpression(name):
-                    target = self._scope[name.value]
+                    # function being passed to call
+                    if isinstance(expr.type_, FunctionType):
+                        target = self.fresh_temporary()
+                        f_label = self._procs[name.value]
+
+                        callee_depth = self.depths[f_label]
+                        caller_depth = self.depths[self._proc[-1].name] # ?
+
+                        # what link depth is it? is it the depth of the function parameter with regards to its parent? so self.depths[name.value]? or the depth related to the function it is passed to
+                        link_depth = max(0, caller_depth - callee_depth + 1)
+
+                        self.push('fatptr', f_label, result = target, link_depth = link_depth)
+                    else:
+                        target = self._scope[name.value]
 
                 case IntExpression(value):
                     target = self.fresh_temporary()
@@ -228,18 +241,30 @@ class MM:
                     self.push(OPCODES[operator], *arguments, result = target)
 
                 case CallExpression(proc, arguments):
-                    for i, argument in enumerate(arguments):
-                        temp = self.for_expression(argument)
-                        self.push('param', i+1, temp)
-                    if expr.type_ != Type.VOID:
-                        target = self.fresh_temporary()
+                    if f"%{proc.value}" in self._proc[-1].arguments:
 
-                    callee_depth = self.depths[self._procs[proc.value]]
-                    caller_depth = self.depths[self._proc[-1].name]
+                        fatptr_temp = self._scope[proc.value]
 
-                    link_depth = None if callee_depth==0 else caller_depth - callee_depth + 1
+                        for i, argument in enumerate(arguments):
+                            temp = self.for_expression(argument)
+                            self.push('param', i+1, temp)
+                        if expr.type_ != Type.VOID:
+                            target = self.fresh_temporary()
 
-                    self.push('call', self._procs[proc.value], len(arguments), result = target, link_depth = link_depth)
+                        self.push('callfatptr', fatptr_temp, len(arguments), result = target)
+                    else:
+                        for i, argument in enumerate(arguments):
+                            temp = self.for_expression(argument)
+                            self.push('param', i+1, temp)
+                        if expr.type_ != Type.VOID:
+                            target = self.fresh_temporary()
+
+                        callee_depth = self.depths[self._procs[proc.value]]
+                        caller_depth = self.depths[self._proc[-1].name]
+
+                        link_depth = None if callee_depth==0 else caller_depth - callee_depth + 1
+
+                        self.push('call', self._procs[proc.value], len(arguments), result = target, link_depth = link_depth)
 
                 case PrintExpression(argument):
                     temp = self.for_expression(argument)

@@ -11,11 +11,12 @@ class AsmGen(abc.ABC):
     MACHINE    = None
 
     def __init__(self):
-        self._tparams = dict()
-        self._temps   = dict()
-        self._asm     = []
+        self._tparams   = dict()
+        self._temps     = dict()
+        self._nextindex = 0
+        self._asm       = []
 
-    def _temp(self, temp):
+    def _temp(self, temp, size = 1):
         parts = temp.split(':')
         if len(parts) == 2:
             temp, link_depth = parts[0], self.curr_depth - int(parts[1])
@@ -27,14 +28,19 @@ class AsmGen(abc.ABC):
         elif temp in self._tparams:
             prelude, temp = [], self._format_param_with_static_link(self._tparams[temp])
         else:
-            index = self._temps.setdefault(temp, len(self._temps))
+            if temp in self._temps:
+                index = self._temps[temp]
+            else:
+                index = self._nextindex
+                self._temps[temp] = index
+                self._nextindex += size
             prelude, temp = self._format_temp(index, link_depth)
         for i in prelude:
             self._emit(*i)
         return temp
 
     @abc.abstractmethod
-    def _format_temp(self, index):
+    def _format_temp(self, index, link_depth=None):
         pass
 
     @abc.abstractmethod
@@ -53,7 +59,7 @@ class AsmGen(abc.ABC):
         opcode = instr.opcode
         args   = instr.arguments[:]
 
-        if opcode == 'call':
+        if opcode in ['call', 'fatptr']:
             args.append(instr.link_depth)
         else:
             assert(instr.link_depth is None)
@@ -104,6 +110,7 @@ class AsmGen_x64_Linux(AsmGen):
         super().__init__()
         self._params = []
         self._endlbl = None
+        self.curr_depth = 0
 
     def _format_temp(self, index, link_depth):
         if isinstance(index, str):
@@ -237,8 +244,6 @@ class AsmGen_x64_Linux(AsmGen):
         for x in self._params[6:][::-1]:
             self._emit('pushq', self._temp(x))
 
-        # static link
-        # can change to only occur if captured vars
         if link_depth is not None:
 
             if link_depth == 0:
@@ -251,26 +256,72 @@ class AsmGen_x64_Linux(AsmGen):
 
                 self._emit('pushq', '%r12')
 
+        else:
             self._emit('pushq', '$0')
 
-        else: # to always have a static link
-            self._emit('pushq', '$0')
-            self._emit('pushq', '$0')
+        self._emit('pushq', '$0')
 
         self._emit('callq', lbl)
 
         if qarg > 0:
-            self._emit('addq', f'${qarg + qarg & 0x1}', '%rsp')
+            self._emit('addq', f'${8*(qarg + (qarg & 0x1))}', '%rsp')
 
-        if link_depth is not None:
-            self._emit('addq', '$16', '%rsp')
-        else: # to always have a static link
-            self._emit('addq', '$16', '%rsp')
+        self._emit('addq', '$16', '%rsp')
 
         if ret is not None:
             self._emit('movq', '%rax', self._temp(ret))
 
         self._params = []
+
+    def _emit_callfatptr(self, fatptr_temp, arg, ret = None):
+        # extract function address from fatptr
+        self._emit('movq', self._temp(fatptr_temp), '%r12')
+
+        assert(arg == len(self._params))
+
+        for i, x in enumerate(self._params[:6]):
+            self._emit('movq', self._temp(x), self.PARAMS[i])
+
+        qarg = 0 if arg <= 6 else arg - 6
+
+        if qarg & 0x1:
+            self._emit('subq', '$8', '%rsp')
+
+        for x in self._params[6:][::-1]:
+            self._emit('pushq', self._temp(x))
+
+        self._emit('pushq', '-8(%r12)') # static link put on stack
+        self._emit('pushq', '$0')
+
+        self._emit('callq', '*(%r12)')
+
+        if qarg > 0:
+            self._emit('addq', f'${8 * (qarg + (qarg & 0x1))}', '%rsp')
+
+        self._emit('addq', '$16', '%rsp')
+
+        if ret is not None:
+            self._emit('movq', '%rax', self._temp(ret))
+
+        self._params = []
+
+    def _emit_fatptr(self, f_label, link_depth, dst):
+        # create the fat pointer at dst
+        self._emit('leaq', self._temp(dst, size = 3), '%r13')
+
+        self._emit('movq', '%r13', '(%r13)')
+        self._emit('subq', '$8', '(%r13)')
+
+        # self._emit('movq', f"${f_label}", '-8(%r13)')
+        self._emit('leaq', f"{f_label}(%rip)", '%rax')
+        self._emit('movq', '%rax', '-8(%r13)')
+        
+        self._emit('movq', '%rbp', '%r12')
+
+        for i in range(link_depth):
+            self._emit('movq', '24(%r12)', '%r12')
+
+        self._emit('movq', '%r12', '-16(%r13)')
 
     def _emit_ret(self, ret = None):
         if ret is not None:
@@ -303,7 +354,7 @@ class AsmGen_x64_Linux(AsmGen):
                 for instr in ptac:
                     emitter(instr)
 
-                nvars  = len(emitter._temps)
+                nvars  = emitter._nextindex
                 nvars += nvars & 1
 
                 return [
@@ -513,7 +564,7 @@ class AsmGen_arm64_Darwin(AsmGen):
                 for instr in ptac:
                     emitter(instr)
 
-                nvars  = len(emitter._temps)
+                nvars  = emitter._nextindex
                 nvars += nvars & 1
 
                 return [
